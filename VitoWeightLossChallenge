@@ -1,0 +1,83 @@
+address public Vito;
+address public DickMasterson;
+uint public weightLossGoal = 100; // default weight loss goal in pounds
+uint public timeFrameInDays;
+uint public startingWeight;
+uint public finalWeight;
+uint public totalDonations;
+bool public isChallengeActive = true;
+mapping(address => uint) public donations;
+
+constructor(address _Vito, address _DickMasterson, uint _timeFrameInDays) {
+    Vito = _Vito;
+    DickMasterson = _DickMasterson;
+    timeFrameInDays = _timeFrameInDays;
+}
+
+function enterStartingWeight(uint _startingWeight) public {
+    require(msg.sender == DickMasterson, "Only the officiant can enter the starting weight");
+    startingWeight = _startingWeight;
+}
+
+function enterFinalWeight(uint _finalWeight) public {
+    require(msg.sender == DickMasterson, "Only the officiant can enter the final weight");
+    require(isChallengeActive == false, "Challenge is still active");
+    finalWeight = _finalWeight;
+    disperseFunds();
+}
+
+function setWeightLossGoal(uint _weightLossGoal) public {
+    require(msg.sender == DickMasterson, "Only the officiant can set the weight loss goal");
+    weightLossGoal = _weightLossGoal;
+}
+
+function donate() public payable {
+    require(msg.value > 0, "Donation amount must be greater than 0");
+    donations[msg.sender] += msg.value;
+    totalDonations += msg.value;
+}
+
+function calculatePercentageLost() private view returns (uint) {
+    uint percentageLost = ((startingWeight - finalWeight) * 100) / startingWeight;
+    if (percentageLost < 0) {
+        percentageLost = 0;
+    } else if (percentageLost > 100) {
+        percentageLost = 100;
+    }
+    return percentageLost;
+}
+
+function disperseFunds() public {
+    require(msg.sender == DickMasterson, "Only the officiant can disperse funds");
+    require(isChallengeActive == false, "Challenge is still active");
+    uint percentageLost = calculatePercentageLost();
+    for (uint i = 0; i < totalDonations; i++) {
+        address donor = address(i);
+        uint donation = donations[donor];
+        uint percentageDonation = (donation * percentageLost) / weightLossGoal;
+        if (percentageLost == 0 || percentageDonation < 0) {
+            payable(donor).transfer(donation);
+        } else {
+            uint amountToVito = percentageDonation * donation / 100;
+            uint amountToDonor = donation - amountToVito;
+            payable(donor).transfer(amountToDonor);
+            payable(Vito).transfer(amountToVito);
+        }
+    }
+}
+
+function endChallenge() public {
+    require(msg.sender == DickMasterson, "Only the officiant can end the challenge");
+    require(isChallengeActive == true, "Challenge is already ended");
+    require(block.timestamp >= (timeFrameInDays + 7) * 1 days, "Challenge is not yet over");
+    if (finalWeight == 0) {
+        isChallengeActive = false;
+        for (uint i = 0; i < totalDonations; i++) {
+            address donor = address(i);
+            uint donation = donations[donor];
+            payable(donor).transfer(donation);
+        }
+    } else {
+        isChallengeActive = false;
+    }
+}
